@@ -8,7 +8,13 @@ pub async fn add_product(
     data: web::Data<AppState>,
     mut payload: web::Payload,
 ) -> Result<HttpResponse, Error> {
-    let mut products = data.products.lock().unwrap();
+    let mut products = match data.products.lock() {
+        Ok(guard) => guard,
+        Err(e) => {
+            log::error!("Mutex poisoned in add_product: {:?}", e);
+            return Ok(HttpResponse::InternalServerError().body("Internal server error"));
+        }
+    };
     let new_id = products.len() as i32 + 1;
 
     // payload is a stream of Bytes objects

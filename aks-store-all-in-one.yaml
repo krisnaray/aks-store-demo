@@ -336,10 +336,10 @@ kind: Service
 metadata:
   name: product-service
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   ports:
   - name: http
-    port: 3002
+    port: 80
     targetPort: 3002
   selector:
     app: product-service
