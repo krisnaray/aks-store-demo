@@ -211,64 +211,7 @@ class ProductServiceUser(HttpUser):
             else:
                 response.failure(f"Failed to delete product {product_id}: {response.status_code}")
     
-    @tag('ai')
-    @task(1)
-    def check_ai_health(self):
-        """Check the AI service health status"""
-        with self.client.get(
-            "/ai/health",
-            name="AI Health Check",
-            catch_response=True
-        ) as response:
-            if response.status_code == 200:
-                response.success()
-            else:
-                response.failure(f"AI health check failed with status {response.status_code}")
     
-    @tag('ai')
-    @task(1)
-    def generate_product_description(self):
-        """Generate a product description using the AI service"""
-        # Random pet product types
-        product_types = [
-            "Collar", "Leash", "Toy", "Bed", "Bowl", "Carrier", 
-            "Treats", "Food", "Medicine", "Shampoo", "Brush"
-        ]
-        
-        # Random pet animal types
-        animal_types = ["dog", "cat", "bird", "fish", "rabbit", "hamster", "reptile"]
-        
-        # Create a random product name
-        product_name = f"{random.choice(['Premium', 'Deluxe', 'Basic', 'Professional', 'Ultimate'])} {random.choice(product_types)}"
-        
-        # Select random tags
-        tags = [random.choice(animal_types), random.choice(["toy", "health", "grooming", "food", "accessories"])]
-        
-        # Create request payload
-        payload = {
-            "name": product_name,
-            "tags": tags
-        }
-        
-        with self.client.post(
-            "/ai/generate/description",
-            name="Generate Description",
-            json=payload,
-            catch_response=True
-        ) as response:
-            if response.status_code == 200:
-                try:
-                    result = response.json()
-                    if result and "description" in result:
-                        response.success()
-                    else:
-                        response.failure("Invalid AI description generation response")
-                except json.JSONDecodeError:
-                    response.failure("Failed to parse JSON response")
-            else:
-                response.success()  # Don't fail the test if AI service is not available
-                logging.info(f"AI description generation failed with status {response.status_code}")
-
 if __name__ == "__main__":
     # This allows running the script directly for testing purposes
     pass

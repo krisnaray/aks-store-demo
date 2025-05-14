@@ -1,0 +1,87 @@
+name: deploy-to-aks
+
+on:
+  workflow_run:
+    workflows: ["package-product-service"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'pets'
+        type: choice
+        options:
+          - pets
+          - staging
+          - production
+
+env:
+  RESOURCE_GROUP: alt-aks-kk-demo
+  AKS_CLUSTER: aks-kk-demo
+  NAMESPACE: pets
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set environment variables
+        id: set-variables
+        run: |
+          echo "REPOSITORY=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "IMAGE=product-service" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$(echo ${GITHUB_SHA} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        
+      - name: Set AKS context
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ env.RESOURCE_GROUP }}
+          cluster-name: ${{ env.AKS_CLUSTER }}
+            - name: Deploy to AKS
+        run: |
+          # Add a timestamp annotation to force a restart
+          TIMESTAMP=$(date +%s)
+          
+          # Update the deployment with the latest image and timestamp
+          # Use the specific SHA version instead of 'latest' for better reliability
+          kubectl -n ${{ env.NAMESPACE }} set image deployment/product-service product-service=${{ steps.set-variables.outputs.REPOSITORY }}/${{ steps.set-variables.outputs.IMAGE }}:${{ steps.set-variables.outputs.VERSION }}
+          kubectl -n ${{ env.NAMESPACE }} patch deployment product-service -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"kubernetes.io/change-cause\":\"GitHub Action deployment at $TIMESTAMP\"}}}}}"
+          
+          # Wait for the deployment to roll out
+          kubectl -n ${{ env.NAMESPACE }} rollout status deployment/product-service
+            - name: Verify service status
+        run: |
+          # Wait for the service to be ready
+          echo "Waiting for service to be ready..."
+          sleep 30
+          
+          # Get the service IP
+          SERVICE_IP=$(kubectl -n ${{ env.NAMESPACE }} get service product-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          echo "Product service is available at: http://${SERVICE_IP}"
+          
+          # Check the health endpoint
+          HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${SERVICE_IP}/health)
+          echo "Health endpoint returned status: ${HEALTH_STATUS}"
+          
+          if [ "$HEALTH_STATUS" != "200" ]; then
+            echo "Service health check failed with status ${HEALTH_STATUS}"
+            echo "Checking pod logs..."
+            kubectl -n ${{ env.NAMESPACE }} logs deployment/product-service --tail=100
+            exit 1
+          fi
+          
+          echo "Service is healthy!"

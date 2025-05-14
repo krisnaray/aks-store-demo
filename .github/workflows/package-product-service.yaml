@@ -47,8 +47,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}     
-      
-      - name: Build and push
+        - name: Build and push
         uses: docker/build-push-action@v2
         with:
           context: src/product-service
@@ -62,3 +61,5 @@ jobs:
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.created=${{ steps.set-variables.outputs.CREATED }}
             org.opencontainers.image.revision=${{ steps.set-variables.outputs.VERSION }}
+          build-args: |
+            RUST_BACKTRACE=1

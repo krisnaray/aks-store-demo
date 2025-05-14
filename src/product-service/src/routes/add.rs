@@ -8,11 +8,13 @@ pub async fn add_product(
     data: web::Data<AppState>,
     mut payload: web::Payload,
 ) -> Result<HttpResponse, Error> {
+    // Use the PoisonError's into_inner() method to recover the value even if the mutex is poisoned
     let mut products = match data.products.lock() {
         Ok(guard) => guard,
         Err(e) => {
             log::error!("Mutex poisoned in add_product: {:?}", e);
-            return Ok(HttpResponse::InternalServerError().body("Internal server error"));
+            // Recover the mutex even if poisoned to prevent cascading failures
+            e.into_inner()
         }
     };
     let new_id = products.len() as i32 + 1;
